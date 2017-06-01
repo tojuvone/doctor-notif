@@ -48,6 +48,8 @@ get_compute_host_info() {
     # get computer host info which first VM boot in as admin user
     COMPUTE_HOST=$(openstack $as_admin_user server show ${VM_BASENAME}1 |
                    grep "OS-EXT-SRV-ATTR:host" | awk '{ print $4 }')
+    PROJECT_ID=$(openstack $as_admin_user server show ${VM_BASENAME}1 |
+                   grep "project_id" | awk '{ print $4 }')
     compute_host_in_undercloud=${COMPUTE_HOST%%.*}
     die_if_not_set $LINENO COMPUTE_HOST "Failed to get compute hostname"
 
@@ -200,13 +202,12 @@ create_alarm() {
             $ceilometer alarm-event-create \
                        --name "$ALARM_BASENAME$i" \
                        --alarm-action "http://localhost:$CONSUMER_PORT/failure" \
-                       --description "VM failure" \
+                       --description "Host forced_down" \
                        --enabled True \
                        --repeat-actions False \
                        --severity "moderate" \
-                       --event-type compute.instance.update \
-                       -q "traits.state=string::error; \
-                       traits.instance_id=string::$vm_id"
+                       --event-type host.forced_down \
+                       -q "traits.project_id=string::$PROJECT_ID"
             }
      done
 }

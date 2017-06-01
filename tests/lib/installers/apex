@@ -33,6 +33,18 @@ function installer_apply_patches {
             date
             echo "### apply patches (installer=apex)"
 
+            ep_conf=/etc/ceilometer/event_definitions.yaml
+            entry="forced_down"
+            if ! grep -q -e "$entry" $ep_conf; then
+                echo "- event_type: host.forced_down" >> $ep_conf
+                echo "  traits: &forced_down_traits" >> $ep_conf
+                echo "    project_id:" >> $ep_conf
+                echo "      fields: payload.project_id" >> $ep_conf
+                echo "    instances:" >> $ep_conf
+                echo "      fields: payload.instances" >> $ep_conf
+                sudo systemctl restart openstack-aodh-listener.service
+            fi
+
             ep_conf=/etc/ceilometer/event_pipeline.yaml
             ep_entry="- notifier://?topic=alarm.all"
             if sudo grep -e "$ep_entry" $ep_conf; then
@@ -95,6 +107,13 @@ function installer_revert_patches {
                 echo "modify the congress config"
                 sudo sed -i -e "/^drivers/s/^\(.*\),$co_entry    # added by doctor script/\1/" $co_conf
                 sudo systemctl restart openstack-congress-server.service
+            fi
+
+            ep_conf=/etc/ceilometer/event_definitions.yaml
+            entry="forced_down"
+            if grep -q -e "$entry" $ep_conf; then
+                sed -ie "/forced_down/Q" $ep_conf
+                sudo systemctl restart openstack-aodh-listener.service
             fi
 
             ep_conf=/etc/ceilometer/event_pipeline.yaml

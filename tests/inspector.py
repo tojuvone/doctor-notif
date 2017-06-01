@@ -14,6 +14,8 @@ from flask import request
 import json
 import logger as doctor_log
 import os
+import oslo_messaging as messaging
+from oslo_config import cfg
 import threading
 import time
 
@@ -61,6 +63,16 @@ class DoctorInspectorSample(object):
         self.nova=self.novaclients[0]
         self.nova.servers.list(detailed=False)
         self.init_servers_list()
+        #opnfv env tbd. Not hardcoding, get from .conf
+        #auth_host_ip=os.environ['OS_AUTH_URL'].split("//",1)[1].split("/",1)[0]
+        transport = messaging.get_transport(cfg.CONF, 'rabbit://guest:DVWqXnXwWcZc6A2sWkHGsyYxp@192.168.173.13:5672//')
+        #devstack controller
+        #transport = messaging.get_transport(cfg.CONF)
+        self.notifier = messaging.Notifier(transport,
+                              'host.forced_down',
+                              driver='messaging',
+                              topics=['notifications'])
+        self.notifier = self.notifier.prepare(publisher_id='inspector')
 
     def init_servers_list(self):
         opts = {'all_tenants': True}
@@ -75,6 +87,17 @@ class DoctorInspectorSample(object):
                 LOG.error('can not get hostname from server=%s' % server)
 
     def disable_compute_host(self, hostname):
+        projects=dict()
+        for server in self.servers[hostname]:
+            if server.tenant_id in projects:
+               projects[server.tenant_id].append(server.id)
+            else:
+               projects[server.tenant_id] = list()
+               projects[server.tenant_id].append(server.id)
+        for project in projects:
+            payload=dict(project_id=project,instances=projects[project])
+            #tbd parallel
+            self.notifier.info({'some': 'context'}, 'host.forced_down', payload)
         threads = []
         if len(self.servers[hostname]) > self.NUMBER_OF_CLIENTS:
             # TODO(tojuvone): This could be enhanced in future with dynamic

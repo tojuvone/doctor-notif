@@ -47,6 +47,18 @@ function installer_apply_patches {
                 service ceilometer-agent-notification restart
             fi
 
+            ep_conf=/etc/ceilometer/event_definitions.yaml
+            entry="forced_down"
+            if ! grep -q -e "$entry" $ep_conf; then
+                echo "- event_type: host.forced_down" >> $ep_conf
+                echo "  traits: &forced_down_traits" >> $ep_conf
+                echo "    project_id:" >> $ep_conf
+                echo "      fields: payload.project_id" >> $ep_conf
+                echo "    instances:" >> $ep_conf
+                echo "      fields: payload.instances" >> $ep_conf
+                service aodh-listener restart
+            fi
+
             # TODO(r-mibu): enable this section once congress 4.0.0 is available
             if false; then
             co_conf=/etc/congress/congress.conf
@@ -164,6 +176,13 @@ function installer_revert_patches {
             if grep -q "# added by doctor script" $ep_conf; then
                 sed -ie "/# added by doctor script/d" $ep_conf
                 service ceilometer-agent-notification restart
+            fi
+
+            ep_conf=/etc/ceilometer/event_definitions.yaml
+            entry="forced_down"
+            if grep -q -e "$entry" $ep_conf; then
+                sed -ie "/forced_down/Q" $ep_conf
+                service aodh-listener restart
             fi
 
             np_conf=/etc/nova/policy.json
